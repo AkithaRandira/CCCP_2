@@ -7,7 +7,7 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 public class DatabaseConnectionPool {
-    private final String url = "jdbc:mysql://localhost:3306/cccp_db";
+    private final String url = "jdbc:mysql://localhost:3306/db_syos";
     private final String user = "root";
     private final String password = "";
     private final int MAX_POOL_SIZE = 10;
