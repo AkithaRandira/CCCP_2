@@ -2,6 +2,7 @@ package main.servlets;
 
 import main.app.ApplicationContext;
 import main.app.UserInteraction;
+import main.service.concurrency.RequestHandler;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 public class BillingServlet extends HttpServlet {
     private UserInteraction userInteraction;
+    private RequestHandler requestHandler;
 
     @Override
     public void init() throws ServletException {
@@ -25,6 +27,10 @@ public class BillingServlet extends HttpServlet {
             this.userInteraction = new UserInteraction(context);
             System.out.println("BillingServlet initialized successfully.");
         }
+
+        // Initialize the RequestHandler for concurrency
+        this.requestHandler = new RequestHandler();
+        System.out.println("RequestHandler initialized successfully.");
     }
 
     @Override
@@ -45,22 +51,36 @@ public class BillingServlet extends HttpServlet {
         clearSessionMessages(req);
 
         // Get billing token from session
-        String billingToken = (String) req.getSession().getAttribute("billingToken");
+        final String billingToken = (String) req.getSession().getAttribute("billingToken");
         if (billingToken == null) {
-            billingToken = UUID.randomUUID().toString(); // Generate a new token if missing (fallback)
-            req.getSession().setAttribute("billingToken", billingToken);
+            req.getSession().setAttribute("billingToken", UUID.randomUUID().toString());
         }
 
-        // Delegate to UserInteraction for processing the request
-        userInteraction.processRequest(req.getParameterMap(), req, billingToken);
+        // Capture effectively final variables for lambda
+        final HttpServletRequest request = req;
+        final HttpServletResponse response = resp;
 
-        // Check for errors and handle redirection/forwarding
-        if (req.getSession().getAttribute("errorMessage") != null) {
-            req.getRequestDispatcher("/WEB-INF/jspFiles/billing.jsp").forward(req, resp);
-        } else {
-            req.getRequestDispatcher("/WEB-INF/jspFiles/billing.jsp").forward(req, resp);
-        }
+        // Wrap the request processing logic in a Runnable
+        Runnable task = () -> {
+            try {
+                // Delegate to UserInteraction for processing the request
+                userInteraction.processRequest(request.getParameterMap(), request, billingToken);
+
+                // Redirect or forward based on processing results
+                if (request.getSession().getAttribute("errorMessage") != null) {
+                    request.getRequestDispatcher("/WEB-INF/jspFiles/billing.jsp").forward(request, response);
+                } else {
+                    request.getRequestDispatcher("/WEB-INF/jspFiles/billing.jsp").forward(request, response);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        };
+
+        // Add the task to the RequestHandler for processing
+        requestHandler.handleRequest(task);
     }
+
 
     private void clearSessionMessages(HttpServletRequest req) {
         req.getSession().removeAttribute("successMessage");
